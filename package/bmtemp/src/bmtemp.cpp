@@ -6,7 +6,7 @@
 
 #define VENDOR_ID  0x16c0
 #define PRODUCT_ID 0x05df
-#define DEBUG	1
+#define DEBUG	0
 
 static	int			ONEWIRE_COUNT;                      //  количество ROM
 static	unsigned long long	ONEWIRE_ROM[128];                   //  номера ROM
@@ -115,7 +115,6 @@ int hid_send_feature_report(usb_dev_handle *dev, const unsigned char *data, size
 
 	int res = -1;
 
-//	res = usb_control_msg(dev, data[0], data[1], data[2], 0x01, (char *) data, length, 5000);
 	res = usb_control_msg(dev, 0x21, 0x01, 0x0300, 0x00, (char *) data, length, 5000);
 
 	if ( DEBUG ) printf("[D] hid_send_feature_report: res=0x%02X\n", res);
@@ -124,24 +123,6 @@ int hid_send_feature_report(usb_dev_handle *dev, const unsigned char *data, size
 	if ( DEBUG ) for (int k=0; k<length; k++) printf("0x%02X ", data[k]);
 	if ( DEBUG ) printf("\n");
 
-//	res = libusb_control_transfer(NULL/*was: dev->device_handle */,
-//		LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE|LIBUSB_ENDPOINT_OUT,
-//		0x09/*HID set_report*/,
-//		(3/*HID feature*/ << 8) | report_number,
-//		0 /* was: dev->interface */,
-//		(unsigned char *)data, length,
-//		1000/*timeout millis*/);
-/*	
-	if (res < 0)
-		return -1;
-*/	
-	/* Account for the report ID */
-/*	if (skipped_report_id)
-		length++;
-	if ( DEBUG ) printf("hid_send_feature_report: length=0x%02X\n", length);
-*/
-//	return length;
-	
 	return res;
 }
 
@@ -164,12 +145,8 @@ int hid_get_feature_report(usb_dev_handle *dev, unsigned char *data, size_t leng
 	in: 0xA1
 	out 0x21
 	*/
-//usb_control_msg(usb_dev_handle*, int, int, int, int, char*, int, int)'
-//        res = usb_control_msg(dev, data[0], data[1], 0x00, 0x00, (char *) data, length, 5000);
 	res = usb_control_msg(dev, 0xA1, 0x01, 0x0300, 0x00, (char *) data, length, 5000);
 
-//	res = usb_control_msg(dev, 0x21, 0x09, 0x0200, 0x01, (char *) data, length, 5000);
-//	res = usb_control_msg(dev, 0x21, 0x01, (3 << 8) | report_number, 0, (char *)data, length, 5000);
 	if ( DEBUG ) printf("[D] hid_get_feature_report: res=0x%02X\n", res);	
 
 	if ( DEBUG ) printf("[D] hid_get_feature_report: after call data=");
@@ -594,13 +571,11 @@ int main(int argc, char *argv[])
     	if (SEARCH_ROM(0, 0)) printf("[.] Найдено DALLAS - %i\n", ONEWIRE_COUNT);
 
 	float T;
-        //dbg:
-	//GET_TEMPERATURE(0x12345678, T);
 
 	if ( ONEWIRE_COUNT<=0 ) { printf("[.] no sensors found, exiting\n"); return 1; }
 	if (!SKIP_ROM_CONVERT()) { printf("[!] Error SKIP_ROM_CONVERT\n"); return 1; }
 	printf("[.] getting temperature...");
-	sleep(10);
+	sleep(1);
 	printf(" temperature is here :)\n");
 	for (int i=0; i<ONEWIRE_COUNT; i++)
 	{
