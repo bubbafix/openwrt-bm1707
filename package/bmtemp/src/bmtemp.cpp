@@ -18,7 +18,7 @@
 
 #define VENDOR_ID	0x16c0
 #define PRODUCT_ID	0x05df
-#define DEBUG		0
+#define DEBUG		1
 #define EXIT_OK		0
 #define EXIT_NO_ARG	1
 #define EXIT_NO_SENSOR	2
@@ -268,17 +268,17 @@ bool USB_GET_FEATURE()
     if ( DEBUG ) printf("[D] enter USB_GET_FEATURE\n");
     bool RESULT=false;
     int i=3;		// number of retries
-    int j=0;		// used to copy array (can be optimized)
+//    int j=0;		// used to copy array (can be optimized)
     unsigned char buf[8];
     while (!RESULT & ((i--)>0)) // 3 times for sure :)
     {
 	// TODO: probably delete next line, because we don't put any data into input buffer prior to call
-        for (j=0; j<8; j++) { buf[j]=USB_BUFI[j+1]; }
-        try { RESULT=hid_get_feature_report(USB, buf, 8);}
-//        try { RESULT=hid_get_feature_report(USB, USB_BUFI, 9);}
+//        for (j=0; j<8; j++) { buf[j]=USB_BUFI[j+1]; }
+//        try { RESULT=hid_get_feature_report(USB, buf, 8);}
+        try { RESULT=hid_get_feature_report(USB, &USB_BUFI[1], 8);}
              catch (...) { RESULT=false; };
     }
-    for (j=0; j<8; j++) { USB_BUFI[j+1]=buf[j]; }	
+//    for (j=0; j<8; j++) { USB_BUFI[j+1]=buf[j]; }	
     if (!RESULT) printf("[!] USB_GET_FEATURE: Error reading from USB-device\n");
     return RESULT;
 }
@@ -291,16 +291,16 @@ bool USB_SET_FEATURE()
     if ( DEBUG ) printf("[D] enter USB_SET_FEATURE\n");
     bool RESULT=false;
 
-    int j=0;
-    unsigned char buf[8];
-    for (j=0; j<8; j++) { buf[j]=USB_BUFO[j+1]; }
+//    int j=0;
+//    unsigned char buf[8];
+//    for (j=0; j<8; j++) { buf[j]=USB_BUFO[j+1]; }
 
-//    try { RESULT=hid_send_feature_report(USB, USB_BUFO, 9);}
-    try { RESULT=hid_send_feature_report(USB, buf, 8);}
+//    try { RESULT=hid_send_feature_report(USB, buf, 8);}
+    try { RESULT=hid_send_feature_report(USB, &USB_BUFO[1], 8);}
         catch (...) { RESULT=false; };
 
     // TODO: probably delete next line, because we don't get any data back into output buffer
-    for (j=0; j<8; j++) { USB_BUFO[j+1]=buf[j]; }
+//    for (j=0; j<8; j++) { USB_BUFO[j+1]=buf[j]; }
 
     if (!RESULT) printf("[!] USB_SET_FEATURE: Error writing to USB-device\n");
     return RESULT;
@@ -558,7 +558,7 @@ bool SEARCH_ROM(unsigned long long ROM_NEXT, int PL)
 }
 
 /*
- * skip ROM-commande, start measuring temperature, 9ms
+ * skip ROM-command, start measuring temperature, 9ms
  */
 bool SKIP_ROM_CONVERT()
 {
@@ -592,13 +592,14 @@ bool GET_TEMPERATURE(unsigned long long ROM, float &T)
                         if (OW_READ_4BYTE(L2))
                             if (OW_READ_BYTE(L3))
                             {
+				if ( DEBUG ) printf("[D] L1=%x\tL2=%x\tL3=%x\n", L1, L2, L3);
                                 CRC=0;
                                 for (int i=0; i<4; i++) CRC=CRC8(CRC, (L1>>(i*8))&0xFF);
-				printf("[!] CRC=%i\n", CRC);
+				if ( DEBUG ) printf("[D] CRC=%x\n", CRC);
                                 for (int i=0; i<4; i++) CRC=CRC8(CRC, (L2>>(i*8))&0xFF);
-				printf("[!] CRC=%i\n", CRC);
+				if ( DEBUG ) printf("[D] CRC=%x\n", CRC);
                                 CRC=CRC8(CRC, L3);
-				printf("[!] CRC=%i\n", CRC);
+				if ( DEBUG ) printf("[D] CRC=%x\n", CRC);
                                 RESULT=CRC==0;
                                 short K=L1&0xFFFF;
                                 //  DS18B20 +10.125=00A2h, -10.125=FF5Eh
@@ -607,7 +608,7 @@ bool GET_TEMPERATURE(unsigned long long ROM, float &T)
                                 T=1000;     //  for unknow FAMILY - no sensor exists
                                 if ((FAMILY==0x28)|(FAMILY==0x22)) T=K*0.0625;  //  DS18B20 | DS1822
                                 if (FAMILY==0x10) T=K*0.5;                      //  DS18S20 | DS1820
-				printf("[!] T=%f\n", T);
+				if ( DEBUG ) printf("[D] ~T=%f\n", T);
                             } //else printf("[!] !OW_READ_BYTE(L3) \n");
 			//else printf("[!] !OW_READ_4BYTE(L2) \n");
 		    //else printf("[!] !OW_READ_4BYTE(L1) \n");
@@ -770,49 +771,36 @@ int main(int argc, char *argv[])
 			if (!USB) return EXIT_ERROR;
 			// init, get temp (match_rom)
 			float T;
-			ONEWIRE_COUNT=0;
-			if (SEARCH_ROM(0, 0))
+			ONEWIRE_COUNT = 1;
+			ONEWIRE_ROM[0] = sensor;
+			// show temp
+			if (!SKIP_ROM_CONVERT())
 			{
-				if ( ONEWIRE_COUNT<=0 ) 
-				{ 
-					if ( verbose ) printf("[.] no sensors found, exiting\n"); 
-					device_close(USB);
-					return EXIT_NO_SENSOR; 
-				} else
-				{
-//					ONEWIRE_COUNT = 1;
-//					ONEWIRE_ROM[0] = sensor;
-					// show temp
-					if (!SKIP_ROM_CONVERT())
-					{
-						printf("[!] Error SKIP_ROM_CONVERT\n");
-						device_close(USB);
-						return EXIT_ERROR; 
-					} else
-					{
-						if ( DEBUG ) printf("[D] getting temperature...");
-						msleep(1000);
-						if ( DEBUG ) printf(" temperature is here :)\n");
-						printf("rom=%x\n", sensor); // TODO: remove this line
-//						if ( GET_TEMPERATURE(ONEWIRE_ROM[0], T) )
-						if ( GET_TEMPERATURE(sensor, T) )
-						{ 
-							if (verbose) printf("[+] ROM=%x T=%f\n", (unsigned int)sensor, T);
-							else printf("%f\n", T);
-						} else
-						{
-							printf("[!] Error getting temperature\n");	
-							device_close(USB);
-							return EXIT_ERROR; 
-						}
-
-					}
-				}
-			} else
-			{
-				printf("[!] Error getting temperature\n");	
+				printf("[!] Error SKIP_ROM_CONVERT\n");
 				device_close(USB);
 				return EXIT_ERROR; 
+			} else
+			{
+				if ( DEBUG ) printf("[D] getting temperature...");
+				msleep(1000);
+				if ( DEBUG ) printf(" temperature is here :)\n");
+				if (OW_RESET())
+					if ( GET_TEMPERATURE(ONEWIRE_ROM[0], T) )
+					{ 
+						if (verbose) printf("[+] ROM=%x T=%f\n", (unsigned int)sensor, T);
+						else printf("%f\n", T);
+					} else
+					{
+						printf("[!] Error getting temperature\n");	
+						device_close(USB);
+						return EXIT_ERROR; 
+					}
+				else
+				{
+					printf("[!] Error getting temperature\n");	
+					device_close(USB);
+					return EXIT_ERROR; 
+				}
 			}
 			// release device
 			device_close(USB);
