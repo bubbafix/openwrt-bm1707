@@ -12,9 +12,6 @@
 #include <stdio.h>
 #include <usb.h>
 #include <time.h>
-//#include <string.h>
-//#include "libusb.h"
-//#include <linux/hiddev.h>
 
 #define VENDOR_ID	0x16c0
 #define PRODUCT_ID	0x05df
@@ -35,7 +32,7 @@ static	bool			doScan=false;		// whether to scan for sensors (overrides showInfo)
 static	bool			getTempOnce=false;	// whether to get temperature for one sensor only (overrides doScan)
 static	bool			getTempAll=false;	// whether to get temperature for all sensors (overrides getTempOnce)
 static	bool			verbose=false;		// whether to show more info (not only data)
-static	int			sensor;			// sensor id for getTempOnce
+static	unsigned long long	sensor;			// sensor id for getTempOnce
 
 /*
  * msleep - delay in milliseconds
@@ -52,39 +49,6 @@ int msleep(unsigned long milisec)
          continue;
     return 1;
 }
-
-/*
- * TODO: delete this useless stuff
- */
-/*
-void releaseUSB()
-{
-	if ( DEBUG ) printf("[D] enter releaseUSB\n");
-	usb_set_debug(0);	
-	usb_init();
-	usb_find_busses();
-	usb_find_devices();
-
-	struct usb_bus *bus;
-	struct usb_device *dev;
-
-	for (bus = usb_get_busses(); bus; bus = bus->next)
-	for (dev = bus->devices; dev; dev = dev->next)
-	{
-		if (dev->descriptor.idVendor == VENDOR_ID &&
-		    dev->descriptor.idProduct == PRODUCT_ID)
-		{
-			usb_dev_handle *udev;
-			udev = usb_open(dev);
-			usb_detach_kernel_driver_np(udev, 0);
-			usb_detach_kernel_driver_np(udev, 1);
-			usb_release_interface(udev, 0);
-			usb_release_interface(udev, 1);
-			usb_close(udev);	
-		}
-	}
-}
-*/
 
 /*
  * find_device - find usb device by vendor/product id
@@ -193,10 +157,11 @@ int hid_send_feature_report(usb_dev_handle *dev, const unsigned char *data, size
 	res = usb_control_msg(dev, 0x21, 0x01, 0x0300, 0x00, (char *) data, length, 5000);
 
 	if ( DEBUG ) printf("[D] hid_send_feature_report: res=0x%02X\n", res);
+/*
 	if ( DEBUG ) printf("[D] hid_send_feature_report: after call data=");
 	if ( DEBUG ) for (size_t k=0; k<length; k++) printf("0x%02X ", data[k]);
 	if ( DEBUG ) printf("\n");
-
+*/
 	return res;
 }
 
@@ -206,47 +171,19 @@ int hid_send_feature_report(usb_dev_handle *dev, const unsigned char *data, size
 int hid_get_feature_report(usb_dev_handle *dev, unsigned char *data, size_t length)
 {
 	if ( DEBUG ) printf("[D] enter hid_get_feature_report\n");
+/*
 	if ( DEBUG ) printf("[D] hid_get_feature_report: data=");
 	if ( DEBUG ) for (size_t k=0; k<length; k++) printf("0x%02X ", data[k]);
 	if ( DEBUG ) printf("\n");
-
-	/*
-		LIBUSB_REQUEST_TYPE_CLASS = (0x01 << 5)
-		LIBUSB_RECIPIENT_INTERFACE = 0x01
-		LIBUSB_ENDPOINT_IN = 0x80
-		LIBUSB_ENDPOINT_OUT = 0x00
-	in: 0xA1
-	out 0x21
-	*/
+*/
 	int res = -1;
 	res = usb_control_msg(dev, 0xA1, 0x01, 0x0300, 0x00, (char *) data, length, 5000);
 
 	if ( DEBUG ) printf("[D] hid_get_feature_report: res=0x%02X\n", res);	
-
 	if ( DEBUG ) printf("[D] hid_get_feature_report: after call data=");
 	if ( DEBUG ) for (size_t k=0; k<length; k++) printf("0x%02X ", data[k]);
 	if ( DEBUG ) printf("\n");
 
-//	res = libusb_control_transfer(NULL/* was: dev->device_handle */,
-//		LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE|LIBUSB_ENDPOINT_IN,
-//		0x01/*HID get_report*/,
-//		(3/*HID feature*/ << 8) | report_number,
-//		0/* was: dev->interface */,
-//		(unsigned char *)data, length,
-//		1000/*timeout millis*/);
-
-/*
-	// definition: 
-	extern int usb_control_msg(	struct usb_device *dev, 
-					unsigned int pipe,
-					__u8 request, 
-					__u8 requesttype, 
-					__u16 value, 
-					__u16 index,
-					void *data, 
-					__u16 size, 
-					int timeout);
-*/
 	return res;
 }
 
@@ -268,17 +205,11 @@ bool USB_GET_FEATURE()
     if ( DEBUG ) printf("[D] enter USB_GET_FEATURE\n");
     bool RESULT=false;
     int i=3;		// number of retries
-//    int j=0;		// used to copy array (can be optimized)
-    unsigned char buf[8];
     while (!RESULT & ((i--)>0)) // 3 times for sure :)
     {
-	// TODO: probably delete next line, because we don't put any data into input buffer prior to call
-//        for (j=0; j<8; j++) { buf[j]=USB_BUFI[j+1]; }
-//        try { RESULT=hid_get_feature_report(USB, buf, 8);}
         try { RESULT=hid_get_feature_report(USB, &USB_BUFI[1], 8);}
              catch (...) { RESULT=false; };
     }
-//    for (j=0; j<8; j++) { USB_BUFI[j+1]=buf[j]; }	
     if (!RESULT) printf("[!] USB_GET_FEATURE: Error reading from USB-device\n");
     return RESULT;
 }
@@ -290,18 +221,8 @@ bool USB_SET_FEATURE()
 {
     if ( DEBUG ) printf("[D] enter USB_SET_FEATURE\n");
     bool RESULT=false;
-
-//    int j=0;
-//    unsigned char buf[8];
-//    for (j=0; j<8; j++) { buf[j]=USB_BUFO[j+1]; }
-
-//    try { RESULT=hid_send_feature_report(USB, buf, 8);}
     try { RESULT=hid_send_feature_report(USB, &USB_BUFO[1], 8);}
         catch (...) { RESULT=false; };
-
-    // TODO: probably delete next line, because we don't get any data back into output buffer
-//    for (j=0; j<8; j++) { USB_BUFO[j+1]=buf[j]; }
-
     if (!RESULT) printf("[!] USB_SET_FEATURE: Error writing to USB-device\n");
     return RESULT;
 }
@@ -476,7 +397,7 @@ bool MATCH_ROM(unsigned long long ROM)
     if ( DEBUG ) printf("[D] enter MATCH_ROM\n");
     bool RESULT=false;
     unsigned long long T=ROM;
-    if ( DEBUG ) printf("[D] ROM=%x\n", (int)ROM);
+    if ( DEBUG ) printf("[D] ROM=%llx\n", ROM);
     unsigned char N=3;
     while (!RESULT&((N--)>0))
         if (OW_RESET())
@@ -550,7 +471,7 @@ bool SEARCH_ROM(unsigned long long ROM_NEXT, int PL)
         }
     if (!RESULT) printf("[!] Error SEARCH_ROM\n");
         else ONEWIRE_ROM[ONEWIRE_COUNT++]=ROM;
-    if ( verbose ) printf("[+] found ROM=%x\n", (unsigned int)ONEWIRE_ROM[ONEWIRE_COUNT-1]);
+    if ( verbose ) printf("[+] found ROM=%llx\n", ONEWIRE_ROM[ONEWIRE_COUNT-1]);
     //	recurrent search call
     for (int i=0; i<64; i++)
         if (CL[i]) SEARCH_ROM(RL[i]|(B1<<i), i);
@@ -592,14 +513,14 @@ bool GET_TEMPERATURE(unsigned long long ROM, float &T)
                         if (OW_READ_4BYTE(L2))
                             if (OW_READ_BYTE(L3))
                             {
-				if ( DEBUG ) printf("[D] L1=%x\tL2=%x\tL3=%x\n", L1, L2, L3);
+				if ( DEBUG ) printf("[D] L1=%lx\tL2=%lx\tL3=%hhx\n", L1, L2, L3);
                                 CRC=0;
                                 for (int i=0; i<4; i++) CRC=CRC8(CRC, (L1>>(i*8))&0xFF);
-				if ( DEBUG ) printf("[D] CRC=%x\n", CRC);
+				if ( DEBUG ) printf("[D] CRC=%llx\n", CRC);
                                 for (int i=0; i<4; i++) CRC=CRC8(CRC, (L2>>(i*8))&0xFF);
-				if ( DEBUG ) printf("[D] CRC=%x\n", CRC);
+				if ( DEBUG ) printf("[D] CRC=%llx\n", CRC);
                                 CRC=CRC8(CRC, L3);
-				if ( DEBUG ) printf("[D] CRC=%x\n", CRC);
+				if ( DEBUG ) printf("[D] CRC=%llx\n", CRC);
                                 RESULT=CRC==0;
                                 short K=L1&0xFFFF;
                                 //  DS18B20 +10.125=00A2h, -10.125=FF5Eh
@@ -682,9 +603,9 @@ int main(int argc, char *argv[])
 					return EXIT_NO_ARG;
 				}
 				if ( DEBUG ) printf("[D] get temperature for %s\n",&argv[1][2]);
-				if (sscanf(&argv[1][2], "%x", &sensor)) 
+				if (sscanf(&argv[1][2], "%llx", &sensor)) 
 				{
-					if ( DEBUG ) printf("[D] parsed argument id = %x\n", sensor);
+					if ( DEBUG ) printf("[D] parsed argument id = %llx\n", sensor);
 					getTempOnce=true;
 				} else 
 				{	// unable to convert id from string to hex
@@ -755,8 +676,8 @@ int main(int argc, char *argv[])
 				{
 					if ( GET_TEMPERATURE(ONEWIRE_ROM[i], T) ) 
 					{
-						if ( verbose ) printf("[+] id=%x T=%f\n", (int)ONEWIRE_ROM[i], T);
-						else printf("%x:%f\n", (int)ONEWIRE_ROM[i], T);
+						if ( verbose ) printf("[+] id=%llx T=%f\n", ONEWIRE_ROM[i], T);
+						else printf("%llx:%f\n", ONEWIRE_ROM[i], T);
 					}
 				}
 			}
@@ -787,7 +708,7 @@ int main(int argc, char *argv[])
 				if (OW_RESET())
 					if ( GET_TEMPERATURE(ONEWIRE_ROM[0], T) )
 					{ 
-						if (verbose) printf("[+] ROM=%x T=%f\n", (unsigned int)sensor, T);
+						if (verbose) printf("[+] ROM=%llx T=%f\n", sensor, T);
 						else printf("%f\n", T);
 					} else
 					{
@@ -824,7 +745,7 @@ int main(int argc, char *argv[])
 						if ( verbose ) printf("[.] found %i DALLAS sensor(s):\n", ONEWIRE_COUNT);
 						for (int i=0; i<ONEWIRE_COUNT; i++)
 						{
-							printf("id=%x\n", (unsigned int)ONEWIRE_ROM[i]);
+							printf("id=%llx\n", ONEWIRE_ROM[i]);
 						}
 					}
 				}
