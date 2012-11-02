@@ -15,7 +15,7 @@
 
 #define VENDOR_ID	0x16c0
 #define PRODUCT_ID	0x05df
-#define DEBUG		1
+#define DEBUG		0
 #define EXIT_OK		0
 #define EXIT_NO_ARG	1
 #define EXIT_NO_SENSOR	2
