@@ -1,12 +1,18 @@
 #include <stdio.h>
-//#include <string.h>
 #include <usb.h>
+//#include <time.h>
+//#include <string.h>
 //#include "libusb.h"
 //#include <linux/hiddev.h>
 
-#define VENDOR_ID  0x16c0
-#define PRODUCT_ID 0x05df
-#define DEBUG	0
+#define VENDOR_ID	0x16c0
+#define PRODUCT_ID	0x05df
+#define DEBUG		1
+#define EXIT_OK		0
+#define EXIT_NO_ARG	1
+#define EXIT_NO_SENSOR	2
+#define EXIT_ERROR	127
+#define VERSION		"0.01"
 
 static	int			ONEWIRE_COUNT;                      //  количество ROM
 static	unsigned long long	ONEWIRE_ROM[128];                   //  номера ROM
@@ -14,13 +20,35 @@ static	unsigned long long	ONEWIRE_ROM[128];                   //  номера R
 static	unsigned char		USB_BUFI [9];                       //  буфер приёма
 static	unsigned char		USB_BUFO [9];                       //  буфер передачи
 static	usb_dev_handle		*USB;                               //  устройство USB
+//static	struct usb_device 	*usb_dev;
 //static	hid_device 		*USB;
+//static  char*			manufacturer;
+//static  char*			product;
 
-
-usb_dev_handle* find_device()
+int msleep(unsigned long milisec)
 {
-	
-	if ( DEBUG ) printf("[D] enter find_device\n");
+	sleep(1);
+/*
+    struct timespec req={0};
+    time_t sec=(int)(milisec/1000);
+    milisec=milisec-(sec*1000);
+    req.tv_sec=sec;
+    req.tv_nsec=milisec*1000000L;
+    while(nanosleep(&req,&req)==-1)
+         continue;
+*/
+    return 1;
+}
+
+/*
+void releaseUSB()
+{
+	if ( DEBUG ) printf("[D] enter releaseUSB\n");
+	usb_set_debug(0);	
+	usb_init();
+	usb_find_busses();
+	usb_find_devices();
+
 	struct usb_bus *bus;
 	struct usb_device *dev;
 
@@ -31,27 +59,43 @@ usb_dev_handle* find_device()
 		    dev->descriptor.idProduct == PRODUCT_ID)
 		{
 			usb_dev_handle *udev;
-			char s1[256];
-			char s2[256];
-			
+			udev = usb_open(dev);
+			usb_detach_kernel_driver_np(udev, 0);
+			usb_detach_kernel_driver_np(udev, 1);
+			usb_release_interface(udev, 0);
+			usb_release_interface(udev, 1);
+			usb_close(udev);	
+		}
+	}
+}
+*/
+usb_dev_handle* find_device()
+{
+	struct usb_bus *bus;
+	struct usb_device *dev;
+
+	for (bus = usb_get_busses(); bus; bus = bus->next)
+	for (dev = bus->devices; dev; dev = dev->next)
+	{
+		if (dev->descriptor.idVendor == VENDOR_ID &&
+		    dev->descriptor.idProduct == PRODUCT_ID)
+		{
+			usb_dev_handle *udev;
 			if (!(udev = usb_open(dev)))
 			{
-				
 				return NULL;
 			}
-				
+			char s1[256];
+			char s2[256];
 			usb_get_string_simple(udev, dev->descriptor.iManufacturer, s1, 256);
 			usb_get_string_simple(udev, dev->descriptor.iProduct, s2, 256);
+//			printf("strcpy1=%i\n", strcpy(manufacturer, s1));
+//			printf("strcpy2=%i\n", strcpy(product, s2));
+			if ( DEBUG ) printf("[D] Device: %s - %s\n", s1, s2);
 
-			printf("[+] Device: %s - %s\n", s1, s2);
-			
-							
-			
 			return udev;
 		}
 	}
-	
-
 	return NULL;
 }
 
@@ -97,11 +141,15 @@ usb_dev_handle* setup()
 
 void device_close(usb_dev_handle *udev)
 {
-	
 	if ( DEBUG ) printf("[D] enter device_close\n");
 	usb_release_interface(udev, 0);
-	usb_close(udev);
-	
+	usb_close(udev);	
+}
+
+void showDeviceInfo()
+{
+	if ( DEBUG ) printf("[D] enter showDeviceInfo\n");
+//	printf("[.] Found device: %s - %s\n", manufacturer, product);
 }
 
 int hid_send_feature_report(usb_dev_handle *dev, const unsigned char *data, size_t length)
@@ -110,7 +158,7 @@ int hid_send_feature_report(usb_dev_handle *dev, const unsigned char *data, size
 	if ( DEBUG ) printf("[D] enter hid_send_feature_report\n");
 
 	if ( DEBUG ) printf("[D] hid_send_feature_report: data=");
-	if ( DEBUG ) for (int k=0; k<length; k++) printf("0x%02X ", data[k]);
+	if ( DEBUG ) for (size_t k=0; k<length; k++) printf("0x%02X ", data[k]);
 	if ( DEBUG ) printf("\n");
 
 	int res = -1;
@@ -120,7 +168,7 @@ int hid_send_feature_report(usb_dev_handle *dev, const unsigned char *data, size
 	if ( DEBUG ) printf("[D] hid_send_feature_report: res=0x%02X\n", res);
 
 	if ( DEBUG ) printf("[D] hid_send_feature_report: after call data=");
-	if ( DEBUG ) for (int k=0; k<length; k++) printf("0x%02X ", data[k]);
+	if ( DEBUG ) for (size_t k=0; k<length; k++) printf("0x%02X ", data[k]);
 	if ( DEBUG ) printf("\n");
 
 	return res;
@@ -128,11 +176,10 @@ int hid_send_feature_report(usb_dev_handle *dev, const unsigned char *data, size
 
 int hid_get_feature_report(usb_dev_handle *dev, unsigned char *data, size_t length)
 {
-	
 	if ( DEBUG ) printf("[D] enter hid_get_feature_report\n");
 
 	if ( DEBUG ) printf("[D] hid_get_feature_report: data=");
-	if ( DEBUG ) for (int k=0; k<length; k++) printf("0x%02X ", data[k]);
+	if ( DEBUG ) for (size_t k=0; k<length; k++) printf("0x%02X ", data[k]);
 	if ( DEBUG ) printf("\n");
 
 	int res = -1;
@@ -150,7 +197,7 @@ int hid_get_feature_report(usb_dev_handle *dev, unsigned char *data, size_t leng
 	if ( DEBUG ) printf("[D] hid_get_feature_report: res=0x%02X\n", res);	
 
 	if ( DEBUG ) printf("[D] hid_get_feature_report: after call data=");
-	if ( DEBUG ) for (int k=0; k<length; k++) printf("0x%02X ", data[k]);
+	if ( DEBUG ) for (size_t k=0; k<length; k++) printf("0x%02X ", data[k]);
 	if ( DEBUG ) printf("\n");
 
 //	res = libusb_control_transfer(NULL/* was: dev->device_handle */,
@@ -172,33 +219,19 @@ int hid_get_feature_report(usb_dev_handle *dev, unsigned char *data, size_t leng
 					void *data, 
 					__u16 size, 
 					int timeout);
-        */
-	
-/*
-	if (res < 0)
-		return -1;
 */
-/*
-	if (skipped_report_id)
-		res++;
-*/
-	
 	return res;
 }
 
 void USB_BUF_CLEAR()
 {   //  очистка буферов приёма и передачи
-    
     if ( DEBUG ) printf("[D] enter USB_BUF_CLEAR\n");
     
     for (int i=0; i<9; i++) { USB_BUFI[i]=0; USB_BUFO[i]=0; }
-    
-    
 }
 
 bool USB_GET_FEATURE()
 {   //  чтение в буфер из устройства
-    
     if ( DEBUG ) printf("[D] enter USB_GET_FEATURE\n");
     bool RESULT=false;
     int i=3;   //  число попыток
@@ -216,14 +249,11 @@ bool USB_GET_FEATURE()
     for (j=0; j<8; j++) { USB_BUFI[j+1]=buf[j]; }
 
     if (!RESULT) printf("[!] USB_GET_FEATURE: Error reading from USB-device\n");
-
-    
     return RESULT;
 }
 
 bool USB_SET_FEATURE()
 {   //  запись из буфера в устройство
-    
     if ( DEBUG ) printf("[D] enter USB_SET_FEATURE\n");
     bool RESULT=false;
 
@@ -238,14 +268,11 @@ bool USB_SET_FEATURE()
     for (j=0; j<8; j++) { USB_BUFO[j+1]=buf[j]; }
 
     if (!RESULT) printf("[!] USB_SET_FEATURE: Error writing to USB-device\n");
-
-    
     return RESULT;
 }
 
 bool OW_RESET()
 {   //  RESET, ~3ms
-    
     if ( DEBUG ) printf("[D] enter OW_RESET\n");
     bool RESULT=false;
     USB_BUF_CLEAR();
@@ -255,7 +282,7 @@ bool OW_RESET()
         if (USB_SET_FEATURE())
         {
 	    if ( DEBUG ) printf("[D] OW_RESET: if USB_SET_FEATURE() true...\n");
-            sleep(2);
+            msleep(2);
             if (USB_GET_FEATURE()) 
 	    {
 		if ( DEBUG ) printf("[D] OW_RESET: if USB_GET_FEATURE() true...\n");
@@ -263,14 +290,11 @@ bool OW_RESET()
 	    } else RESULT=false;
         }
     if (!RESULT) printf("[!] Error OW_RESET\n");
-
-    
     return RESULT;
 }
 
 bool OW_READ_2BIT(unsigned char &B)
 {   //  чтение 2-x бит, 3ms
-    
     if ( DEBUG ) printf("[D] enter OW_READ_2BIT\n");
     bool RESULT=false;
     USB_BUF_CLEAR();
@@ -278,38 +302,32 @@ bool OW_READ_2BIT(unsigned char &B)
     USB_BUFO[3]=0x01;    USB_BUFO[4]=0x01;
     if (USB_SET_FEATURE())
         {
-        sleep(1);
+        msleep(1);
         if (USB_GET_FEATURE())
             { RESULT=(USB_BUFI[1]==0x18)&(USB_BUFI[2]==0x82); B=(USB_BUFI[3]&0x01)+((USB_BUFI[4]<<1)&0x02); }
         }
     if (!RESULT) printf("[!] Error OW_READ_2BIT\n");
-
-    
     return RESULT;
 }
 
 bool OW_READ_BYTE(unsigned char &B)
 {   //  чтение байта, 3ms
-    
     if ( DEBUG ) printf("[D] enter OW_READ_BYTE\n");
     bool RESULT=false;
     USB_BUF_CLEAR();
     USB_BUFO[1]=0x18;    USB_BUFO[2]=0x88;    USB_BUFO[3]=0xFF;
     if (USB_SET_FEATURE())
         {
-        sleep(1);
+        msleep(1);
         if (USB_GET_FEATURE())
             { RESULT=(USB_BUFI[1]==0x18)&(USB_BUFI[2]==0x88); B=USB_BUFI[3]; }
         }
     if (!RESULT) printf("[!] Error OW_READ_BYTE\n");
-
-    
     return RESULT;
 }
 
 bool OW_READ_4BYTE(unsigned long &B)
 {   //  чтение 4 байта, 4ms
-    
     if ( DEBUG ) printf("[D] enter OW_READ_4BYTE\n");
     bool RESULT=false;
     USB_BUF_CLEAR();
@@ -317,26 +335,23 @@ bool OW_READ_4BYTE(unsigned long &B)
     USB_BUFO[4]=0xFF;    USB_BUFO[5]=0xFF;    USB_BUFO[6]=0xFF;
     if (USB_SET_FEATURE())
         {
-        sleep(2);
+        msleep(2);
         if (USB_GET_FEATURE())
             { RESULT=(USB_BUFI[1]==0x18)&(USB_BUFI[2]==0x84); B=USB_BUFI[3]+(USB_BUFI[4]<<8)+(USB_BUFI[5]<<16)+(USB_BUFI[6]<<24); }
         }
     if (!RESULT) printf("[!] Error OW_READ_4BYTE\n");
-
-    
     return RESULT;
 }
 
 bool OW_WRITE_BIT(unsigned char B)
 {   //  запись бита, 3ms
-    
     if ( DEBUG ) printf("[D] enter OW_WRITE_BIT\n");
     bool RESULT=false;
     USB_BUF_CLEAR();
     USB_BUFO[1]=0x18;    USB_BUFO[2]=0x81;    USB_BUFO[3]=B&0x01;
     if (USB_SET_FEATURE())
         {
-        sleep(1);
+        msleep(1);
         if (USB_GET_FEATURE())
             RESULT=(USB_BUFI[1]==0x18)&(USB_BUFI[2]==0x81)&((USB_BUFI[3]&0x01)==(B&0x01));
         }
@@ -348,26 +363,22 @@ bool OW_WRITE_BIT(unsigned char B)
 
 bool OW_WRITE_BYTE(unsigned char B)
 {   //  запись байта, 3ms
-    
     if ( DEBUG ) printf("[D] enter OW_WRITE_BYTE\n");
     bool RESULT=false;
     USB_BUF_CLEAR();
     USB_BUFO[1]=0x18;    USB_BUFO[2]=0x88;    USB_BUFO[3]=B;
     if (USB_SET_FEATURE())
         {
-        sleep(1);
+        msleep(1);
         if (USB_GET_FEATURE())
             RESULT=(USB_BUFI[1]==0x18)&(USB_BUFI[2]==0x88)&(USB_BUFI[3]==B);
         }
     if (!RESULT) printf("[!] Error OW_WRITE_BYTE\n");
-
-    
     return RESULT;
 }
 
 bool OW_WRITE_4BYTE(unsigned long B)
 {   //  запись 4 байта, 4ms
-    
     if ( DEBUG ) printf("[D] enter OW_WRITE_4BYTE\n");
     bool RESULT=false;
     unsigned char D0, D1, D2, D3;
@@ -382,32 +393,26 @@ bool OW_WRITE_4BYTE(unsigned long B)
     USB_BUFO[6]=(B>>24)&0xFF;
     if (USB_SET_FEATURE())
         {
-        sleep(2);
+        msleep(2);
         if (USB_GET_FEATURE())
             RESULT=(USB_BUFI[1]==0x18)&(USB_BUFI[2]==0x84)&(USB_BUFI[3]==D0&(USB_BUFI[4]==D1)&(USB_BUFI[5]==D2)&(USB_BUFI[6]==D3));
         }
     if (!RESULT) printf("[!] Error OW_WRITE_4BYTE\n");
-
-    
     return RESULT;
 }
 
 unsigned char CRC8(unsigned char CRC, unsigned char D)
 {   //  подчсёт CRC для DALLAS
-    
     if ( DEBUG ) printf("[D] enter CRC8\n");
     unsigned char R=CRC;
     for (int i=0; i<8; i++)
         if ((R^(D>>i))&0x01==0x01) R=((R^0x18)>>1)|0x80;
             else R=(R>>1)&0x7F;
-
-    
     return R;
 }
 
 bool MATCH_ROM(unsigned long long ROM)
 {   //  выбор прибора по ROM, 14ms
-    
     if ( DEBUG ) printf("[D] enter MATCH_ROM\n");
     bool RESULT=false;
     unsigned long long T=ROM;
@@ -418,14 +423,11 @@ bool MATCH_ROM(unsigned long long ROM)
                 if (OW_WRITE_4BYTE(T&0xFFFFFFFF))
                     RESULT=OW_WRITE_4BYTE((T>>32)&0xFFFFFFFF);
     if (!RESULT) printf("[!] Error MATCH_ROM\n");
-
-    
     return RESULT;
 }
 
 bool SEARCH_ROM(unsigned long long ROM_NEXT, int PL)
 {   //  поиск ROM, 1 dev - 410ms, 5 dev - 2.26s, 20 dev - 8.89s
-    
     if ( DEBUG ) printf("[D] enter SEARCH_ROM\n");
     bool RESULT=false;
     unsigned char N=3;
@@ -485,19 +487,16 @@ bool SEARCH_ROM(unsigned long long ROM_NEXT, int PL)
     if (!RESULT) printf("[!] Error SEARCH_ROM\n");
         else ONEWIRE_ROM[ONEWIRE_COUNT++]=ROM;
 
-    printf("[+] found ROM=%x\n", ONEWIRE_ROM[ONEWIRE_COUNT-1]);
+    printf("[+] found ROM=%x\n", (unsigned int)ONEWIRE_ROM[ONEWIRE_COUNT-1]);
 
     //  рекурентный вызов поиска
     for (int i=0; i<64; i++)
         if (CL[i]) SEARCH_ROM(RL[i]|(B1<<i), i);
-
-    
     return RESULT;
 }
 
 bool SKIP_ROM_CONVERT()
 {   //  пропуск ROM-команд, старт измерения температуры, 9ms
-    
     if ( DEBUG ) printf("[D] enter SKIP_ROM_CONVERT\n");
     bool RESULT=false;
     unsigned char N=3;
@@ -506,8 +505,6 @@ bool SKIP_ROM_CONVERT()
             if (OW_WRITE_BYTE(0xCC))
                 RESULT=OW_WRITE_BYTE(0x44);
     if (!RESULT) printf("[!] Error SKIP_ROM_CONVERT\n");
-
-    
     return RESULT;
 }
 
@@ -542,26 +539,124 @@ bool GET_TEMPERATURE(unsigned long long ROM, float &T)
                                 if (FAMILY==0x10) T=K*0.5;                      //  DS18S20 | DS1820
                                 }
     if (!RESULT) printf("[!] Error GET_TEMPERATURE\n");
-
-    
     return RESULT;
 }
 
+void showUsage()
+{
+	printf("USAGE: ...\n");
+}
+
+// main 
 int main(int argc, char *argv[])
 {
-/*
-	int RESULT = 1;
-	USB = hid_open( VENDOR_ID, PRODUCT_ID, NULL );
-	if (!USB) 
+	printf("[.] bmtemp, version %s\n", VERSION);
+	// check for arguments
+	if (argc < 2) 
 	{
-		printf("unable to open device\n");
-		RESULT = -1;
+		showUsage();
+		return EXIT_NO_ARG;
 	} else 
 	{
-		printf("device opened\n");
-		RESULT = 0;
-  	}
+		if (argv[1][0] == '-') 
+		{
+			switch (argv[1][1])
+			{
+			case 'i': { // show device info
+				// call setup
+				USB = setup();
+				if (!USB) return EXIT_ERROR;
+				// show info
+				showDeviceInfo();
+				// release device
+				device_close(USB);
+				} break;
+			case 's': { // scan for sensors
+				// call setup
+				USB = setup();
+				if (!USB) return EXIT_ERROR;
+				// SEARCH
+				ONEWIRE_COUNT=0;
+				if (SEARCH_ROM(0, 0))
+				{
+					// print ids
+					if ( ONEWIRE_COUNT<=0 ) 
+					{ 
+						printf("[.] no sensors found, exiting\n"); 
+						device_close(USB);
+						return EXIT_NO_SENSOR; 
+					} else
+					{
+						printf("[.] found %i DALLAS sensor(s):\n", ONEWIRE_COUNT);
+						for (int i=0; i<ONEWIRE_COUNT; i++)
+						{
+							printf("id = %x\n", (unsigned int)ONEWIRE_ROM[i]);
+						}
+					}
+				}
+				// release device
+				device_close(USB);
+				} break;
+			case 't': { // get temperature
+				if (argv[1][2] == 0) 
+				{
+					printf("[!] Wrong Argument: %s\n", argv[1]);
+					showUsage();
+					return EXIT_NO_ARG;
+				}
+				unsigned long long sensor=0xa8d3e928;
+				printf("[.] get temperature for %s\n",&argv[1][2]);
+				// call setup
+				USB = setup();
+				if (!USB) return EXIT_ERROR;
+				// init, get temp (match_rom)
+				float T;
+				// show temp
+				if (!SKIP_ROM_CONVERT())
+				{
+					printf("[!] Error SKIP_ROM_CONVERT\n");
+					device_close(USB);
+					return EXIT_ERROR; 
+				}
+				printf("[.] getting temperature...");
+				msleep(1000);
+				printf(" temperature is here :)\n");
+				if ( GET_TEMPERATURE(sensor, T) )
+				{ 
+					printf("[+] ROM=%x T=%f\n", (unsigned int)sensor, T);	
+				} else
+				{
+					printf("[!] Err...\n");	
+					device_close(USB);
+					return EXIT_ERROR; 
+				}
+				// release device
+				device_close(USB);
+				} break;
+			case '?':
+			case 'h':
+				showUsage();
+				return EXIT_OK;
+				break;
+/*
+			case 'r':
+				releaseUSB();
+				break;
 */
+			default:
+				printf("[!] Wrong Argument: %s\n", argv[1]);
+				showUsage();
+				return EXIT_NO_ARG;
+			}			
+		} else {
+			printf("[!] Wrong Argument: %s\n", argv[1]);
+			showUsage();
+			return EXIT_NO_ARG;
+		}
+	}
+	return EXIT_OK; 
+
+/*
 	usb_dev_handle *udev = setup();
 	if (!udev)
 		return 1;
@@ -575,7 +670,7 @@ int main(int argc, char *argv[])
 	if ( ONEWIRE_COUNT<=0 ) { printf("[.] no sensors found, exiting\n"); return 1; }
 	if (!SKIP_ROM_CONVERT()) { printf("[!] Error SKIP_ROM_CONVERT\n"); return 1; }
 	printf("[.] getting temperature...");
-	sleep(1);
+	msleep(1);
 	printf(" temperature is here :)\n");
 	for (int i=0; i<ONEWIRE_COUNT; i++)
 	{
@@ -584,7 +679,7 @@ int main(int argc, char *argv[])
 			printf("[+] ROM=%x T=%f\n", (int)ONEWIRE_ROM[i], T);
 		}
 	}
-	
-	device_close(udev);
+	device_close(USB);
 	return 0;
+*/	
 }
