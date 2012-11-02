@@ -7,7 +7,7 @@ Also it has ability to control external relay by temperature changes.
 
 More information on device available at http://www.masterkit.ru/main/set.php?code_id=565375
 
-** So what is it all about **
+**So what is it all about**
 
 This repo contains files to use with OpenWRT SDK.
 Simply put contents of `package` to proper place and run `make`.
