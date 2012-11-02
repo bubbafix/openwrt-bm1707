@@ -1,13 +1,13 @@
 #include <stdio.h>
 #include <usb.h>
-//#include <time.h>
+#include <time.h>
 //#include <string.h>
 //#include "libusb.h"
 //#include <linux/hiddev.h>
 
 #define VENDOR_ID	0x16c0
 #define PRODUCT_ID	0x05df
-#define DEBUG		1
+#define DEBUG		0
 #define EXIT_OK		0
 #define EXIT_NO_ARG	1
 #define EXIT_NO_SENSOR	2
@@ -20,15 +20,12 @@ static	unsigned long long	ONEWIRE_ROM[128];                   //  номера R
 static	unsigned char		USB_BUFI [9];                       //  буфер приёма
 static	unsigned char		USB_BUFO [9];                       //  буфер передачи
 static	usb_dev_handle		*USB;                               //  устройство USB
-//static	struct usb_device 	*usb_dev;
-//static	hid_device 		*USB;
 //static  char*			manufacturer;
 //static  char*			product;
 
 int msleep(unsigned long milisec)
 {
-	sleep(1);
-/*
+//	sleep(1);
     struct timespec req={0};
     time_t sec=(int)(milisec/1000);
     milisec=milisec-(sec*1000);
@@ -36,7 +33,6 @@ int msleep(unsigned long milisec)
     req.tv_nsec=milisec*1000000L;
     while(nanosleep(&req,&req)==-1)
          continue;
-*/
     return 1;
 }
 
@@ -416,6 +412,7 @@ bool MATCH_ROM(unsigned long long ROM)
     if ( DEBUG ) printf("[D] enter MATCH_ROM\n");
     bool RESULT=false;
     unsigned long long T=ROM;
+    printf("[D] ROM=%x\n", (int)ROM);
     unsigned char N=3;
     while (!RESULT&((N--)>0))
         if (OW_RESET())
@@ -545,6 +542,10 @@ bool GET_TEMPERATURE(unsigned long long ROM, float &T)
 void showUsage()
 {
 	printf("USAGE: ...\n");
+	printf("\t-i\t\tshow device info\n");
+	printf("\t-s\t\tscan for sensors\n");
+	printf("\t-tXXXXXXXX\tget temperature for sensor with XXXXXXXX id\n");
+	printf("\t-a\t\tscan for sensors and show their data\n");
 }
 
 // main 
@@ -604,24 +605,55 @@ int main(int argc, char *argv[])
 					showUsage();
 					return EXIT_NO_ARG;
 				}
-				unsigned long long sensor=0xa8d3e928;
-				printf("[.] get temperature for %s\n",&argv[1][2]);
+				if ( DEBUG ) printf("[D] get temperature for %s\n",&argv[1][2]);
+				int sensor;
+				if (sscanf(&argv[1][2], "%x", &sensor)) 
+				{
+					// printf("\tid = %x\n", sensor);
+				} else
+				{
+					printf("[!] can't convert argument into id: %s\n", &argv[1][2]);
+					showUsage();
+					return EXIT_NO_ARG;
+				}
 				// call setup
 				USB = setup();
 				if (!USB) return EXIT_ERROR;
 				// init, get temp (match_rom)
 				float T;
-				// show temp
-				if (!SKIP_ROM_CONVERT())
+				ONEWIRE_COUNT=0;
+				if (SEARCH_ROM(0, 0))
 				{
-					printf("[!] Error SKIP_ROM_CONVERT\n");
-					device_close(USB);
-					return EXIT_ERROR; 
+					// print ids
+					if ( ONEWIRE_COUNT<=0 ) 
+					{ 
+						printf("[.] no sensors found, exiting\n"); 
+						device_close(USB);
+						return EXIT_NO_SENSOR; 
+					} else
+					{
+						/*
+						printf("[.] found %i DALLAS sensor(s):\n", ONEWIRE_COUNT);
+						for (int i=0; i<ONEWIRE_COUNT; i++)
+						{
+							printf("id = %x\n", (unsigned int)ONEWIRE_ROM[i]);
+						}
+						*/
+//						ONEWIRE_COUNT = 1;
+//						ONEWIRE_ROM[0] = sensor;
+						// show temp
+						if (!SKIP_ROM_CONVERT())
+						{
+							printf("[!] Error SKIP_ROM_CONVERT\n");
+							device_close(USB);
+							return EXIT_ERROR; 
+						}
+					}
 				}
-				printf("[.] getting temperature...");
+				if ( DEBUG ) printf("[F] getting temperature...");
 				msleep(1000);
-				printf(" temperature is here :)\n");
-				if ( GET_TEMPERATURE(sensor, T) )
+				if ( DEBUG ) printf(" temperature is here :)\n");
+				if ( GET_TEMPERATURE(ONEWIRE_ROM[0], T) )
 				{ 
 					printf("[+] ROM=%x T=%f\n", (unsigned int)sensor, T);	
 				} else
@@ -629,6 +661,46 @@ int main(int argc, char *argv[])
 					printf("[!] Err...\n");	
 					device_close(USB);
 					return EXIT_ERROR; 
+				}
+				// release device
+				device_close(USB);
+				} break;
+			case 'a': { // show all
+				// call setup
+				USB = setup();
+				if (!USB) return EXIT_ERROR;
+				// SEARCH
+				ONEWIRE_COUNT=0;
+				if (SEARCH_ROM(0, 0))
+				{
+					// print ids
+					if ( ONEWIRE_COUNT<=0 ) 
+					{ 
+						printf("[.] no sensors found, exiting\n"); 
+						device_close(USB);
+						return EXIT_NO_SENSOR; 
+					} else
+					{
+						printf("[.] found %i DALLAS sensor(s):\n", ONEWIRE_COUNT);
+						for (int i=0; i<ONEWIRE_COUNT; i++)
+						{
+							printf("id = %x\n", (unsigned int)ONEWIRE_ROM[i]);
+						}
+					}
+				}
+				float T;
+
+				if ( ONEWIRE_COUNT<=0 ) { printf("[.] no sensors found, exiting\n"); return 1; }
+				if (!SKIP_ROM_CONVERT()) { printf("[!] Error SKIP_ROM_CONVERT\n"); return 1; }
+				printf("[.] getting temperature...");
+				msleep(1000);
+				printf(" temperature is here :)\n");
+				for (int i=0; i<ONEWIRE_COUNT; i++)
+				{
+					if (GET_TEMPERATURE(ONEWIRE_ROM[i], T)) 
+					{
+						printf("[+] id=%x T=%f\n", (int)ONEWIRE_ROM[i], T);
+					}
 				}
 				// release device
 				device_close(USB);
