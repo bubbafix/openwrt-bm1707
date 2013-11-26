@@ -43,6 +43,11 @@ Let's say it would be Ubuntu on virtualbox. Make sure you have enough disk space
 
 10. File `.ipk` is ready to be installed with `opkg install ...` command.
 
+**Important Notice**
+
+There can be hardware limitations for USB on some routers so it won't work without external USB hub.
+E.g. for TL-MR3020: https://dev.openwrt.org/ticket/11985
+
 ## Thanks to...
 
 * Maxim Integrated http://www.maximintegrated.com/ for beautiful solution.
