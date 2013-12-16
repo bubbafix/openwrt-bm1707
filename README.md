@@ -1,11 +1,11 @@
 # Once upon a time...
 There was a DALLAS 1-wire sensor.
 Many devices used to deal with it.
-So **BM1707** also did.
+So **BM1707 (MP707)** also did.
 This is small USB device that has one sensor on board and ability to connect much more by wire.
 Also it has ability to control external relay by temperature changes.
 
-More information on device available at http://www.masterkit.ru/main/set.php?code_id=565375
+More information on device available at http://olimp-z.ru/mp707 and http://www.masterkit.ru/main/set.php?code_id=565375
 
 **So what is it all about**
 
@@ -50,8 +50,9 @@ E.g. for TL-MR3020: https://dev.openwrt.org/ticket/11985
 
 ## Thanks to...
 
-* Maxim Integrated http://www.maximintegrated.com/ for beautiful solution.
+* Maxim Integrated @ http://www.maximintegrated.com/ for beautiful solution
 * People from www.masterkit.ru for BM1707 device.
-* Serg @ http://usbsergdev.narod.ru for giving an example of code to work with device.
-* All contributors for OpenWrt https://openwrt.org
+* Initial code samples @ http://usbsergdev.narod.ru and http://olimp-z.ru/mp707
+* All contributors for OpenWrt @ https://openwrt.org
+* Public monitoring project @ http://narodmon.ru
 * People who tried to use this package for their feedback
