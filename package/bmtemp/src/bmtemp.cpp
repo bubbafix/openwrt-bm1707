@@ -20,7 +20,7 @@
 #define EXIT_NO_ARG	1
 #define EXIT_NO_SENSOR	2
 #define EXIT_ERROR	127
-#define VERSION		"0.03"
+#define VERSION		"0.1.0"
 
 static	int			ONEWIRE_COUNT;		// number of ROM
 static	unsigned long long	ONEWIRE_ROM[128];	// ROM identifiers
