@@ -20,7 +20,7 @@
 #define EXIT_NO_ARG	1
 #define EXIT_NO_SENSOR	2
 #define EXIT_ERROR	127
-#define VERSION		"0.02"
+#define VERSION		"0.03"
 
 static	int			ONEWIRE_COUNT;		// number of ROM
 static	unsigned long long	ONEWIRE_ROM[128];	// ROM identifiers
@@ -31,8 +31,8 @@ static	bool			showInfo=false;		// whether to show device info
 static	bool			doScan=false;		// whether to scan for sensors (overrides showInfo)
 static	bool			getTempOnce=false;	// whether to get temperature for one sensor only (overrides doScan)
 static	bool			getTempAll=false;	// whether to get temperature for all sensors (overrides getTempOnce)
+static	bool			getTempAllNM=false;	// whether to output narodmon.ru formatted data (overrides getTempOnce and getTempAll)
 static	bool			verbose=false;		// whether to show more info (not only data)
-static	bool			formatNM=false;		// whether to output narodmon.ru formatted data
 static	unsigned long long	sensor;			// sensor id for getTempOnce
 
 /*
@@ -592,26 +592,15 @@ void showDeviceInfo()
 {
 	if ( DEBUG ) printf("[D] enter showDeviceInfo\n");
 //	printf("[.] Found device: %s - %s\n", manufacturer, product);
-	if (formatNM)
-	{
-		// device id
-                unsigned int ID;
-		// 1707 - prefix
-                if (USB_GET_ID(ID)) printf("#1707%04x\n", ID);
-	}
-	else
-	{
-		// device group id
-		unsigned char FAMILY;
-		if (USB_GET_FAMILY(FAMILY)) printf("[.] device family: 0x%02x\n", FAMILY);
-		// firmware version
-		unsigned int SV;
-		if (USB_GET_SOFTV(SV)) printf("[.] firmware version: 0x%02x\n", SV);
-		// device id
-		unsigned int ID;
-		if (USB_GET_ID(ID)) printf("[.] device ID: 0x%04x\n", ID);
-	}
-
+	// device group id
+	unsigned char FAMILY;
+	if (USB_GET_FAMILY(FAMILY)) printf("[.] device family: 0x%02X\n", FAMILY);
+	// firmware version
+	unsigned int SV;
+	if (USB_GET_SOFTV(SV)) printf("[.] firmware version: 0x%02X\n", SV);
+	// device id
+	unsigned int ID;
+	if (USB_GET_ID(ID)) printf("[.] device ID: 0x%08X\n", ID);
 }
 
 /*
@@ -625,8 +614,8 @@ void showUsage(char *exec)
 	printf("\t-s\t\tscan for sensors and show their ID ony by one\n");
 	printf("\t-tID\tget temperature for sensor with specified ID\n");
 	printf("\t-a\t\tscan for sensors and show their data in format id:value\n");
+	printf("\t-n\t\tscan for sensors and show their data in format for narodmon.ru\n");
 	printf("\t-v\t\tverbose mode on (default is off)\n");
-	printf("\t-n\t\tformat output for narodmon.ru (default is off)\n");
 	printf("\nExit codes:\n");
 	printf("\t0\tEXIT_OK\n");
 	printf("\t1\tEXIT_NO_ARG\n");
@@ -718,7 +707,8 @@ int main(int argc, char *argv[])
                                         return EXIT_NO_ARG;
                                 }
                                 if (DEBUG) printf("[D] use narodmon.ru format for data output\n");
-                                formatNM=true;
+				if (DEBUG) printf("[D] set getTempAllNM=true\n");
+                                getTempAllNM=true;
                                 break;
 			default:
 				printf("[!] Wrong Argument: %s\n", argv[1]);
@@ -762,15 +752,8 @@ int main(int argc, char *argv[])
 				{
 					if ( GET_TEMPERATURE(ONEWIRE_ROM[i], T) )
 					{
-						if (formatNM)	// format for narodmon.ru
-						{
-							printf("#%llx#%.2f\n", ONEWIRE_ROM[i], T);
-						}
-						else
-						{
-							if ( verbose ) printf("[+] id=%llx T=%f\n", ONEWIRE_ROM[i], T);
-							else printf("%llx:%f\n", ONEWIRE_ROM[i], T);
-						}
+						if ( verbose ) printf("[+] id=%llx T=%f\n", ONEWIRE_ROM[i], T);
+						else printf("%llx:%f\n", ONEWIRE_ROM[i], T);
 					}
 				}
 			}
@@ -778,96 +761,127 @@ int main(int argc, char *argv[])
 		// release device
 		device_close(USB);
 	} else if (getTempOnce)
+	{
+		if ( DEBUG ) printf("[D] getTempOnce\n");
+		// call setup
+		USB = setup();
+		if (!USB) return EXIT_ERROR;
+		// init, get temp (match_rom)
+		float T;
+		ONEWIRE_COUNT = 1;
+		ONEWIRE_ROM[0] = sensor;
+		// show temp
+		if (!SKIP_ROM_CONVERT())
 		{
-			if ( DEBUG ) printf("[D] getTempOnce\n");
-			// call setup
-			USB = setup();
-			if (!USB) return EXIT_ERROR;
-			// init, get temp (match_rom)
-			float T;
-			ONEWIRE_COUNT = 1;
-			ONEWIRE_ROM[0] = sensor;
-			// show temp
-			if (!SKIP_ROM_CONVERT())
-			{
-				printf("[!] Error SKIP_ROM_CONVERT\n");
-				device_close(USB);
-				return EXIT_ERROR;
-			} else
-			{
-				if ( DEBUG ) printf("[D] getting temperature...");
-				msleep(1000);
-				if ( DEBUG ) printf(" temperature is here :)\n");
-				if (OW_RESET())
-					if ( GET_TEMPERATURE(ONEWIRE_ROM[0], T) )
-					{
-						 if (formatNM)   // format for narodmon.ru
-                                                {
-                                                        printf("#%llx#%.2f\n", sensor, T);
-                                                }
-                                                else
-                                                {
-							if (verbose) printf("[+] ROM=%llx T=%f\n", sensor, T);
-							else printf("%f\n", T);
-						}
-					} else
-					{
-						printf("[!] Error getting temperature\n");
-						device_close(USB);
-						return EXIT_ERROR;
-					}
-				else
+			printf("[!] Error SKIP_ROM_CONVERT\n");
+			device_close(USB);
+			return EXIT_ERROR;
+		} else
+		{
+			if ( DEBUG ) printf("[D] getting temperature...");
+			msleep(1000);
+			if ( DEBUG ) printf(" temperature is here :)\n");
+			if (OW_RESET())
+				if ( GET_TEMPERATURE(ONEWIRE_ROM[0], T) )
+				{
+					if (verbose) printf("[+] ROM=%llx T=%f\n", sensor, T);
+					else printf("%f\n", T);
+				} else
 				{
 					printf("[!] Error getting temperature\n");
 					device_close(USB);
 					return EXIT_ERROR;
 				}
-			}
-			// release device
-			device_close(USB);
-		} else if (doScan)
+			else
 			{
-				if ( DEBUG ) printf("[D] doScan\n");
-				// call setup
-				USB = setup();
-				if (!USB) return EXIT_ERROR;
-				// SEARCH
-				ONEWIRE_COUNT=0;
-				if (SEARCH_ROM(0, 0))
-				{	// print ids
-					if ( ONEWIRE_COUNT<=0 )
+				printf("[!] Error getting temperature\n");
+				device_close(USB);
+				return EXIT_ERROR;
+			}
+		}
+		// release device
+		device_close(USB);
+	} else if (doScan)
+	{
+		if ( DEBUG ) printf("[D] doScan\n");
+		// call setup
+		USB = setup();
+		if (!USB) return EXIT_ERROR;
+		// SEARCH
+		ONEWIRE_COUNT=0;
+		if (SEARCH_ROM(0, 0))
+		{	// print ids
+			if ( ONEWIRE_COUNT<=0 )
+			{
+				if ( verbose ) printf("[-] no sensors found, exiting\n");
+				device_close(USB);
+				return EXIT_NO_SENSOR;
+			} else
+			{
+				if ( verbose ) printf("[.] found %i DALLAS sensor(s):\n", ONEWIRE_COUNT);
+				for (int i=0; i<ONEWIRE_COUNT; i++)
+				{
+					printf("id=%llx\n", ONEWIRE_ROM[i]);
+				}
+			}
+		}
+		// release device
+		device_close(USB);
+	} else if (showInfo)
+	{
+		if ( DEBUG ) printf("[D] showInfo\n");
+		verbose = true;
+		// call setup
+		USB = setup();
+		if (!USB) return EXIT_ERROR;
+		// show info
+		showDeviceInfo();
+		// release device
+		device_close(USB);
+	} else if (getTempAllNM)
+	{
+		// call setup
+		USB = setup();
+		if (!USB) return EXIT_ERROR;
+		// device id
+		unsigned int ID;
+	        if (USB_GET_ID(ID)) printf("#1707%08X\n", ID);
+		// SEARCH
+		ONEWIRE_COUNT=0;
+		if (SEARCH_ROM(0, 0))
+		{
+			if ( ONEWIRE_COUNT<=0 )
+			{
+				device_close(USB);
+				return EXIT_NO_SENSOR;
+			} else
+			{
+				float T;
+				if (!SKIP_ROM_CONVERT())
+				{
+					printf("[!] Error SKIP_ROM_CONVERT\n");
+					device_close(USB);
+					return EXIT_ERROR;
+				}
+				msleep(1000);
+				for (int i=0; i<ONEWIRE_COUNT; i++)
+				{
+					if ( GET_TEMPERATURE(ONEWIRE_ROM[i], T) )
 					{
-						if ( verbose ) printf("[-] no sensors found, exiting\n");
-						device_close(USB);
-						return EXIT_NO_SENSOR;
-					} else
-					{
-						if ( verbose ) printf("[.] found %i DALLAS sensor(s):\n", ONEWIRE_COUNT);
-						for (int i=0; i<ONEWIRE_COUNT; i++)
-						{
-							printf("id=%llx\n", ONEWIRE_ROM[i]);
-						}
+						printf("#%llX#%.2f\n", ONEWIRE_ROM[i], T);
 					}
 				}
-				// release device
-				device_close(USB);
-			} else if (showInfo)
-				{
-					if ( DEBUG ) printf("[D] showInfo\n");
-					if (!formatNM) verbose = true;
-					// call setup
-					USB = setup();
-					if (!USB) return EXIT_ERROR;
-					// show info
-					showDeviceInfo();
-					// release device
-					device_close(USB);
-				} else
-				{
-					if ( DEBUG ) printf("[D] no actions specified\n");
-					showUsage(argv[0]);
-					return EXIT_NO_ARG;
-				}
+			}
+		}
+		// release device
+		device_close(USB);
+		printf("##\n");
+	} else
+	{
+		if ( DEBUG ) printf("[D] no actions specified\n");
+		showUsage(argv[0]);
+		return EXIT_NO_ARG;
+	}
 	// end of decide what to do
 	return EXIT_OK;
 }
