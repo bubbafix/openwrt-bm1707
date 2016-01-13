@@ -24,7 +24,7 @@ PKG_RELEASE:=2
 # The root build directory, $(BUILD_DIR), is by default the build_mipsel
 # directory in your OpenWrt SDK directory
 PKG_BUILD_DIR := $(BUILD_DIR)/$(PKG_NAME)
-PKG_BUILD_DEPENDS:=libusb libstdcpp
+PKG_BUILD_DEPENDS:=libusb-1.0 libstdcpp
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -32,7 +32,7 @@ include $(INCLUDE_DIR)/package.mk
 # The variables defined here should be self explanatory.
 define Package/bmtemp
 	SECTION:=utils
-	DEPENDS:=+libusb +libstdcpp
+	DEPENDS:=+libusb-1.0 +libusb-compat +libstdcpp
 	CATEGORY:=Utilities
 	TITLE:=bmtemp -- USB thermometer BM1707 utility
 endef
