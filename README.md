@@ -2,7 +2,7 @@
 There was a DALLAS 1-wire sensor.
 Many devices used to deal with it.
 So **BM1707 (MP707)** also did.
-This is small USB device that has one sensor on board and ability to connect much more by wire.
+This is a small USB device that has one sensor on board and ability to connect much more by wire.
 Also it has ability to control external relay by temperature changes.
 
 More information on device available at http://olimp-z.ru/mp707 and http://www.masterkit.ru/main/set.php?code_id=565375
