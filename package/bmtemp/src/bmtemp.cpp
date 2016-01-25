@@ -1,9 +1,10 @@
 /********************************************************************
- * BMTEMP - utility to work with BM1707 USB thermometer
+ * BMTEMP - utility to work with BM1707 and MP707R USB thermometer
  *
  * Licence? None. This software is free to use.
  *
  * Author: bubbafix
+ * v0.2.0: sakhapovi
  * Initial code samples were given by Serg
  * http://usbsergdev.narod.ru/
  *
@@ -20,12 +21,13 @@
 #define EXIT_NO_ARG	1
 #define EXIT_NO_SENSOR	2
 #define EXIT_ERROR	127
-#define VERSION		"0.1.0"
+#define VERSION		"0.2.0"
+#define USB_REPEAT      5
 
 static	int			ONEWIRE_COUNT;		// number of ROM
 static	unsigned long long	ONEWIRE_ROM[128];	// ROM identifiers
-static	unsigned char		USB_BUFI [9];		// input buffer
-static	unsigned char		USB_BUFO [9];		// output buffer
+static	unsigned char		USB_BUFI [8];		// input buffer
+static	unsigned char		USB_BUFO [8];		// output buffer
 static	usb_dev_handle		*USB;			// USB device
 static	bool			showInfo=false;		// whether to show device info
 static	bool			doScan=false;		// whether to scan for sensors (overrides showInfo)
@@ -33,7 +35,13 @@ static	bool			getTempOnce=false;	// whether to get temperature for one sensor on
 static	bool			getTempAll=false;	// whether to get temperature for all sensors (overrides getTempOnce)
 static	bool			getTempAllNM=false;	// whether to output narodmon.ru formatted data (overrides getTempOnce and getTempAll)
 static	bool			verbose=false;		// whether to show more info (not only data)
+static	bool			statChanged=false;	// whether to set port status
 static	unsigned long long	sensor;			// sensor id for getTempOnce
+static  bool			pset;
+
+const static int timeout=5000; /* timeout in ms */
+
+usb_dev_handle *udev = NULL;
 
 /*
  * msleep - delay in milliseconds
@@ -65,7 +73,7 @@ usb_dev_handle* find_device()
 		if (dev->descriptor.idVendor == VENDOR_ID &&
 		    dev->descriptor.idProduct == PRODUCT_ID)
 		{
-			usb_dev_handle *udev;
+			//usb_dev_handle *udev;
 			if (!(udev = usb_open(dev)))
 			{
 				return NULL;
@@ -89,7 +97,7 @@ usb_dev_handle* setup()
 {
 
 	if ( DEBUG ) printf("[D] enter setup\n");
-	usb_dev_handle *udev;
+	//usb_dev_handle *udev;
 
 	usb_set_debug(0);
 	usb_init();
@@ -193,15 +201,18 @@ void USB_BUF_CLEAR()
  */
 bool USB_GET_FEATURE()
 {
-    if ( DEBUG ) printf("[D] enter USB_GET_FEATURE\n");
     bool RESULT=false;
-    int i=3;		// number of retries
-    while (!RESULT & ((i--)>0)) // 3 times for sure :)
-    {
-        try { RESULT=hid_get_feature_report(USB, &USB_BUFI[1], 8);}
-             catch (...) { RESULT=false; };
-    }
-    if (!RESULT) printf("[!] USB_GET_FEATURE: Error reading from USB-device\n");
+    int i=3;
+    while (!RESULT & ((i--)>0))
+        try {
+	    if(pset)
+	    	RESULT=hid_get_feature_report(udev, (unsigned char *)USB_BUFI, 8);
+	    else
+		RESULT=hid_get_feature_report(USB, &USB_BUFI[1], 8);
+	    //RESULT=hid_get_feature_report(udev, (unsigned char *)USB_BUFI, 8);
+        }
+            catch (...) { RESULT=false; };
+    if (!RESULT) printf("Error reading from device\n");
     return RESULT;
 }
 
@@ -210,11 +221,16 @@ bool USB_GET_FEATURE()
  */
 bool USB_SET_FEATURE()
 {
-    if ( DEBUG ) printf("[D] enter USB_SET_FEATURE\n");
     bool RESULT=false;
-    try { RESULT=hid_send_feature_report(USB, &USB_BUFO[1], 8);}
-        catch (...) { RESULT=false; };
-    if (!RESULT) printf("[!] USB_SET_FEATURE: Error writing to USB-device\n");
+    try { 
+	if(pset)
+		RESULT=hid_send_feature_report(udev, (unsigned char *)USB_BUFO, 8);
+	else
+		RESULT=hid_send_feature_report(USB, &USB_BUFO[1], 8);
+	//RESULT=hid_send_feature_report(udev, (unsigned char *)USB_BUFO, 8);
+    }
+        catch (...) { RESULT=false;  };
+    if (!RESULT) printf("Error writing to device\n");
     return RESULT;
 }
 
@@ -226,7 +242,7 @@ bool USB_GET_FAMILY(unsigned char &FAMILY)
     USB_BUF_CLEAR();
     bool RESULT=false;
     USB_BUFO[1]=0x1D;
-    int i=3;   //  число попыток
+    int i=3;   //  try count
     while (!RESULT & ((i--)>0))
         if (USB_SET_FEATURE())
             if (USB_GET_FEATURE())
@@ -421,6 +437,36 @@ bool OW_WRITE_4BYTE(unsigned long B)
     return RESULT;
 }
 
+bool USB_GET_PORT(unsigned char &PS)
+{
+    USB_BUF_CLEAR();
+    bool RESULT=false;
+    USB_BUFO[0]=0x7E;
+    int i=USB_REPEAT;
+    while (!RESULT & ((i--)>0))
+        if (USB_SET_FEATURE())
+            if (USB_GET_FEATURE())
+                if (USB_BUFI[0]==0x7E) { PS=USB_BUFI[1]; RESULT=USB_BUFI[2]==PS; }
+                    else RESULT=false;
+    if (!RESULT) printf("Error reading PORT\n");
+    return RESULT;
+}
+
+bool USB_SET_PORT(unsigned char PS)
+{
+    USB_BUF_CLEAR();
+    bool RESULT=false;
+    USB_BUFO[0]=0xE7;
+    USB_BUFO[1]=PS;
+    int i=USB_REPEAT;
+    while (!RESULT & ((i--)>0))
+        if (USB_SET_FEATURE())
+            if (USB_GET_FEATURE())
+                 { RESULT=(USB_BUFI[0]==0xE7)&(USB_BUFI[1]==PS)&(USB_BUFI[2]==PS);}
+    if (!RESULT) printf("Error writing PORT\n");
+    return RESULT;
+}
+
 /*
  * calculate CRC for DALLAS sensor
  */
@@ -539,6 +585,41 @@ bool SKIP_ROM_CONVERT()
     return RESULT;
 }
 
+int read_ports()
+{
+    int ret=0;
+    unsigned char PS;
+    if(USB_GET_PORT(PS)) {
+        if((PS==8)|(PS==24)) printf("p1=1\n");
+        else printf("p1=0\n");
+        if(PS>=16) printf("p2=1\n");
+        else printf("p2=0\n");
+        return 1;
+    }
+    return 0;
+}
+
+int set_port(int num, bool stat)
+ {
+    unsigned char PS, PS_OLD;
+    bool ret;
+    if (USB_GET_PORT(PS))
+        PS_OLD=PS; 
+    else { 
+	printf("Error USB_GET_PORT\n"); 
+	return 0; 
+    }
+    if ((num==1)&(stat==1))  { PS=PS|0x08; ret = USB_SET_PORT(PS);}
+    else if ((num==1)&(stat==0)) { PS=PS&0x10; ret = USB_SET_PORT(PS);}
+    else if ((num==2)&(stat==1))  { PS=PS|0x10; ret = USB_SET_PORT(PS);}
+    else if ((num==2)&(stat==0)) { PS=PS&0x08; ret = USB_SET_PORT(PS);}             
+    if(!ret) return 0;
+    printf("Status port changed\n");
+
+    return 1;
+}
+
+
 /*
  * readin temperature, 28ms
  */
@@ -616,6 +697,8 @@ void showUsage(char *exec)
 	printf("\t-a\t\tscan for sensors and show their data in format id:value\n");
 	printf("\t-n\t\tscan for sensors and show their data in format for narodmon.ru\n");
 	printf("\t-v\t\tverbose mode on (default is off)\n");
+	printf("\t-p\t\tset off/on port status. -p <port> <status> \n\n");
+	printf("\t-k\t\get port status\n");
 	printf("\nExit codes:\n");
 	printf("\t0\tEXIT_OK\n");
 	printf("\t1\tEXIT_NO_ARG\n");
@@ -628,7 +711,7 @@ void showUsage(char *exec)
  */
 int main(int argc, char *argv[])
 {
-	// check for arguments
+        // check for arguments
 	if (argc < 2)
 	{
 		showUsage(argv[0]);
@@ -710,6 +793,28 @@ int main(int argc, char *argv[])
 				if (DEBUG) printf("[D] set getTempAllNM=true\n");
                                 getTempAllNM=true;
                                 break;
+			case 'p':
+				if (argv[1][2] != 0)
+                                {
+                                        printf("[!] Wrong Argument: %s\n", argv[1]);				
+                                        return EXIT_NO_ARG;
+                                }
+				pset = true;
+				udev = setup();
+				set_port(atoi((const char*) argv[2]), (bool) atoi((const char*) argv[3]));
+                                statChanged=true;
+				break;
+			case 'k':
+				if (argv[1][2] != 0)
+                                {
+                                        printf("[!] Wrong Argument: %s\n", argv[1]);				
+                                        return EXIT_NO_ARG;
+                                }
+				pset = true;
+				udev = setup();
+				read_ports();
+                                statChanged=true;
+				break;
 			default:
 				printf("[!] Wrong Argument: %s\n", argv[1]);
 				showUsage(argv[0]);
@@ -836,6 +941,13 @@ int main(int argc, char *argv[])
 		if (!USB) return EXIT_ERROR;
 		// show info
 		showDeviceInfo();
+		// release device
+		device_close(USB);
+	} else if (statChanged)
+	{
+		if ( DEBUG ) printf("[D] Status changed\n");
+		verbose = true;
+		if (!USB) return EXIT_ERROR;
 		// release device
 		device_close(USB);
 	} else if (getTempAllNM)
